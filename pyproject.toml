@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llp-bc"
+version = "1.0.0"
+description = "LLP-BC client for submitting ESP32C3 builds to remote server"
+authors = [{name = "Your Name", email = "your.email@mit.edu"}]
+readme = "README.md"
+license = {text = "LICENSE"}
+requires-python = ">=3.8"
+dependencies = [
+    "requests>=2.28.0",
+    "esptool>=5.3.0"
+]
+
+[project.scripts]
+llp-bc = "llp_bc.runner:main"
+
+[tool.setuptools]
+packages = ["llp_bc"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+
+

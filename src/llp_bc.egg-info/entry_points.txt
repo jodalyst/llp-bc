@@ -1,0 +1,2 @@
+[console_scripts]
+llp_bc = llp_bc.runner:main
