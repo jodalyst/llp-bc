@@ -30,14 +30,14 @@ HISTORY_ARCHIVE = '_history'
 BUILD_DIR = 'build'
 SRC_DIR = 'src'
 
-HTTPS_VERIFY = False #yuck...doing this as MIT firewall patch for now. yuck.
+HTTPS_VERIFY = True #yuck...doing this as MIT firewall patch for now. yuck.
 
 def create_config():
     """Set up initial configuration with kerberos, MIT ID, and server endpoint."""
     config = configparser.ConfigParser()
     kerberos = input("Enter your kerberos: ").lower().strip()
     mitid = int(input("Enter your MIT ID number (nine digits): ").strip())
-    server_endpoint = input("Enter the llp_client endpoint (e.g., eecs-digital-60.mit.edu/llp-bc): ").lower().strip()
+    server_endpoint = input("Enter the llp_client endpoint (e.g., llp-relay.mit.edu/llp-bc): ").lower().strip()
 
     server_endpoint = "https://" + server_endpoint
 
