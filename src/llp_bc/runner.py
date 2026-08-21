@@ -1,3 +1,5 @@
+
+
 import requests
 import shutil
 import time
@@ -8,8 +10,9 @@ import json
 import sys
 import configparser
 import logging
-#adding flashing capability:
 import esptool
+import serial
+import serial.tools.list_ports
 
 
 
@@ -79,6 +82,7 @@ def get_config():
     return kerberos, mitid, server
 
 
+## need to update:
 def colorize_message(message):
     """Colorize server messages."""
     for line in message.splitlines():
@@ -213,7 +217,7 @@ def compile(target_folder):
             except Exception as e:
                 logging.error(f"{e}")
             print("\033[1m\033[91m! Job Finished (with issues)!\033[0m")
-            print('\a\a\a')
+            print('\a\a\a') # gotta figure out why this thing won't triple beep. I think I'm incompetent.
         break
 
 
@@ -234,7 +238,7 @@ def _load_flash_config(build_dir):
 def flash(target_folder, port_filter="vid=0x303A", before="usb_reset",
           after="watchdog_reset", baud=None):
     """
-    Flash the ESP32-C3 using build artifacts already present in <target_folder>/build/.
+    Flash the ESP32C3 using build artifacts already present in <target_folder>/build/.
     Run `llp build <target_folder>` first to populate the build directory.
     """
     if not os.path.isdir(target_folder):
@@ -299,17 +303,129 @@ def flash(target_folder, port_filter="vid=0x303A", before="usb_reset",
         print('\a\a\a')
 
 
+# Monitor mcu serial output (done locally...no server or internet needed)
+
+def _parse_port_filter(port_filter):
+    """Parse a 'vid=0x303A,pid=0x1001' style filter string into a dict of ints."""
+    result = {}
+    for piece in port_filter.split(","):
+        piece = piece.strip()
+        if not piece or "=" not in piece:
+            continue
+        key, val = piece.split("=", 1)
+        key = key.strip().lower()
+        val = val.strip()
+        try:
+            result[key] = int(val, 0)  # handles 0x-prefixed hex or plain decimal
+        except ValueError:
+            print(f"\033[1m\033[93mWARNING: could not parse port filter piece '{piece}'\033[0m")
+    return result
+
+
+def find_serial_port(port_filter="vid=0x303A"):
+    """Find a connected serial port matching the given VID/PID value."""
+    wanted = _parse_port_filter(port_filter)
+    matches = []
+    for p in serial.tools.list_ports.comports():
+        if "vid" in wanted and p.vid != wanted["vid"]:
+            continue
+        if "pid" in wanted and p.pid != wanted["pid"]:
+            continue
+        matches.append(p)
+
+    if not matches:
+        return None
+    if len(matches) > 1:
+        print(f"\033[1m\033[93mWARNING: multiple matching ports found, using first: {matches[0].device}\033[0m")
+        for p in matches:
+            print(f"    {p.device}  (vid={p.vid:#06x} pid={p.pid:#06x})" if p.vid else f"    {p.device}")
+    return matches[0].device
+
+
+# honestly should probably remove the baud since it is not longer useful for our class.
+
+def monitor(port=None, port_filter="vid=0x303A", baud=115200, wait=True, log_file=None):
+    """
+    Open a serial connection to mcu + stream its output to stdout.
+    Finds the port automatically via VID/PID filter unless --port is given.
+    Ctrl-C to exit.
+    """
+    if port is None:
+        print(f"[monitor] Searching for device matching '{port_filter}'...")
+        port = find_serial_port(port_filter)
+        while port is None and wait:
+            time.sleep(0.5)
+            port = find_serial_port(port_filter)
+        if port is None:
+            print(f"\033[1m\033[31mError: No serial device found matching '{port_filter}'.\033[0m")
+            return
+
+    print(f"[monitor] Opening {port} @ {baud} baud. Press Ctrl-C to exit.")
+
+    logf = open(log_file, "a") if log_file else None
+    ser = None
+    try:
+        while True:
+            try:
+                if ser is None:
+                    ser = serial.Serial(port, baudrate=baud, timeout=1)
+                line = ser.readline()
+                if not line:
+                    continue
+                try:
+                    text = line.decode("utf-8", errors="replace").rstrip("\r\n")
+                except Exception:
+                    text = repr(line)
+                stamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                out = f"[{stamp}] {text}"
+                colorize_message(out)
+                if logf:
+                    logf.write(out + "\n")
+                    logf.flush()
+            except (serial.SerialException, OSError) as e:
+                print(f"\033[1m\033[93mWARNING: lost connection to {port} ({e}). Reconnecting...\033[0m")
+                if ser is not None:
+                    try:
+                        ser.close()
+                    except Exception:
+                        pass
+                    ser = None
+                new_port = None
+                while new_port is None:
+                    time.sleep(0.05)
+                    new_port = find_serial_port(port_filter) if port is None or True else port
+                port = new_port
+                print(f"[monitor] Reconnected on {port}.")
+    except KeyboardInterrupt:
+        print("\n[monitor] Exiting.")
+    finally:
+        if ser is not None:
+            try:
+                ser.close()
+            except Exception:
+                pass
+        if logf:
+            logf.close()
+
+
 def print_usage():
     print("Usage:")
     print(" llp-bc configure")
     print("  llp-bc compile  <target_folder>")
     print("  llp-bc flash  <target_folder> [options]")
+    print("  llp-bc monitor  [options]")
     print()
     print("Flash options (all optional):")
     print("  --port-filter <filter>   esptool port filter       (default: vid=0x303A)")
     print("  --before      <action>   Reset before connecting   (default: usb_reset)")
     print("  --after       <action>   Reset after flashing      (default: watchdog_reset)")
     print("  --baud        <rate>     Baud rate override        (default: auto)")
+    print()
+    print("Monitor options (all optional):")
+    print("  --port        <device>   Explicit serial port (e.g. /dev/cu.usbmodem101)")
+    print("  --port-filter <filter>   VID/PID filter            (default: vid=0x303A)")
+    print("  --baud        <rate>     Baud rate                 (default: 115200)")
+    print("  --log         <file>     Also append output to file")
 
 
 def main():
@@ -349,6 +465,27 @@ def main():
                 print_usage()
                 return
         flash(target_folder, port_filter=port_filter, before=before, after=after, baud=baud)
+    elif command == "monitor":
+        args        = sys.argv[2:]
+        port        = None
+        port_filter = "vid=0x303A"
+        baud        = 115200
+        log_file    = None
+        i = 0
+        while i < len(args):
+            if args[i] == "--port" and i + 1 < len(args):
+                port = args[i + 1]; i += 2
+            elif args[i] == "--port-filter" and i + 1 < len(args):
+                port_filter = args[i + 1]; i += 2
+            elif args[i] == "--baud" and i + 1 < len(args):
+                baud = int(args[i + 1]); i += 2
+            elif args[i] == "--log" and i + 1 < len(args):
+                log_file = args[i + 1]; i += 2
+            else:
+                print(f"\033[1m\033[31mUnknown monitor option: {args[i]}\033[0m")
+                print_usage()
+                return
+        monitor(port=port, port_filter=port_filter, baud=baud, log_file=log_file)
     else:
         print(f"\033[1m\033[31mUnknown command: {command}\033[0m")
         print_usage()
@@ -356,9 +493,5 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
 
 
