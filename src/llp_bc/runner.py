@@ -41,9 +41,7 @@ def create_config():
     kerberos = input("Enter your kerberos: ").lower().strip()
     mitid = int(input("Enter your MIT ID number (nine digits): ").strip())
     server_endpoint = input("Enter the llp_client endpoint (e.g., llp-relay.mit.edu/llp-bc): ").lower().strip()
-
     server_endpoint = "https://" + server_endpoint
-
     params = {"user": kerberos, "id": mitid}
     try:
         response = requests.get(server_endpoint + SERVER_CHECK_ENDPOINT, params=params, verify=HTTPS_VERIFY)
@@ -53,12 +51,10 @@ def create_config():
         print("Exiting. Configuration failed.")
         logging.error(f"{e}")
         return
-
     if response.headers.get('content-type') == 'application/json':
         try:
             stuff = json.loads(response.text)
             print(stuff['message'])
-
             if stuff['message'] == SERVER_CHECK_MESSAGE_GOOD:
                 config['Auth'] = {'kerberos': kerberos, 'mitid': mitid, 'server': server_endpoint}
                 os.makedirs(user_config_path, exist_ok=True)
@@ -96,28 +92,21 @@ def colorize_message(message):
             line = line.replace("INFO", "\033[1m\033[34mINFO\033[0m")
         print(line)
 
-
-# compile (remote)
-
+# compile (remote on server)
 def compile(target_folder):
-    """Submit src folder for compiling and retrieve build artifacts."""
+    """Submits src folder for compiling and retrieving build artifacts."""
     user, mitid, server = get_config()
-
     if not os.path.isdir(target_folder):
         print(f"\033[1m\033[31mError: Target folder '{target_folder}' not found!\033[0m")
         return
-
     src_path = os.path.join(target_folder, SRC_DIR)
     if not os.path.isdir(src_path):
         print(f"\033[1m\033[31mError: '{SRC_DIR}' folder not found in '{target_folder}'!\033[0m")
         return
-
     os.makedirs(f"{target_folder}/{HISTORY_ARCHIVE}", exist_ok=True)
-
     timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     comp_file = f"{timestamp}_sub.zip"
     res_file = f"{timestamp}_res.zip"
-
     print("Zipping src folder...")
     zf = zipfile.ZipFile(comp_file, "w")
     for dirname, subdirs, files in os.walk(src_path):
@@ -127,12 +116,9 @@ def compile(target_folder):
             print(f"  Adding: {arcname}")
             zf.write(filepath, arcname=arcname)
     zf.close()
-
     sub_location = f"{target_folder}/{HISTORY_ARCHIVE}/{comp_file}"
     shutil.move(comp_file, sub_location)
-
     print(f"\nSubmitting job... (size: {os.path.getsize(sub_location) / 1024 / 1024:.2f} MB)")
-
     submit_url = server + SUBENDPT
     files = [('file', open(sub_location, 'rb'))]
     params = {
@@ -144,9 +130,7 @@ def compile(target_folder):
         "jobtype": "build",
         "requestedmachine": "None"
     }
-
     response = requests.post(submit_url, params=params, files=files, verify=HTTPS_VERIFY)
-
     print(f"Response status: {response.status_code}")
     print(f"Response headers: {response.headers}")
     print(f"Response text: {response.text}")
@@ -206,7 +190,7 @@ def compile(target_folder):
                     print(stuff['message'])
             except Exception as e:
                 logging.error(f"{e}")
-            print("\033[1m\033[92m✓ Job Finished (with no errors)!\033[0m")
+            print("\033[1m\033[92m YAY Job Finished (with no errors)!\033[0m")
             print('\a')
         else:
             response = requests.post(finish_url, params=params, verify=HTTPS_VERIFY)
@@ -216,7 +200,7 @@ def compile(target_folder):
                     print(stuff['message'])
             except Exception as e:
                 logging.error(f"{e}")
-            print("\033[1m\033[91m! Job Finished (with issues)!\033[0m")
+            print("\033[1m\033[91m Uhoh Job Finished (with issues)!\033[0m")
             print('\a\a\a') # gotta figure out why this thing won't triple beep. I think I'm incompetent.
         break
 
@@ -239,7 +223,6 @@ def flash(target_folder, port_filter="vid=0x303A", before="usb_reset",
           after="watchdog_reset", baud=None):
     """
     Flash the ESP32C3 using build artifacts already present in <target_folder>/build/.
-    Run `llp build <target_folder>` first to populate the build directory.
     """
     if not os.path.isdir(target_folder):
         print(f"\033[1m\033[31mError: Target folder '{target_folder}' not found!\033[0m")
@@ -248,7 +231,6 @@ def flash(target_folder, port_filter="vid=0x303A", before="usb_reset",
     build_dir = os.path.join(target_folder, BUILD_DIR)
     if not os.path.isdir(build_dir):
         print(f"\033[1m\033[31mError: No build/ directory found in '{target_folder}'.\033[0m")
-        print("Run 'llp build <target_folder>' first.")
         return
 
     try:
@@ -279,7 +261,7 @@ def flash(target_folder, port_filter="vid=0x303A", before="usb_reset",
         "--flash_size", settings.get("flash_size", "keep"),
     ]
 
-    # Append address/binary pairs in address order, using absolute paths
+    # Append address/binary pairs in address order, using absolute paths, yucko
     for addr, rel_path in sorted(flash_files.items(), key=lambda x: int(x[0], 16)):
         full_path = os.path.join(build_dir, rel_path)
         if not os.path.exists(full_path):
@@ -304,7 +286,6 @@ def flash(target_folder, port_filter="vid=0x303A", before="usb_reset",
 
 
 # Monitor mcu serial output (done locally...no server or internet needed)
-
 def _parse_port_filter(port_filter):
     """Parse a 'vid=0x303A,pid=0x1001' style filter string into a dict of ints."""
     result = {}
@@ -469,7 +450,7 @@ def main():
         args        = sys.argv[2:]
         port        = None
         port_filter = "vid=0x303A"
-        baud        = 115200
+        baud        = 115200 #I don't think this is needed tbh, but I also think it needs some sort of argument here.
         log_file    = None
         i = 0
         while i < len(args):
@@ -487,7 +468,7 @@ def main():
                 return
         monitor(port=port, port_filter=port_filter, baud=baud, log_file=log_file)
     else:
-        print(f"\033[1m\033[31mUnknown command: {command}\033[0m")
+        print(f"\033[1m\033[31mUnknown command: {command} ????\033[0m")
         print_usage()
 
 
