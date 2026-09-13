@@ -13,7 +13,7 @@ Dynamic: license-file
 
 # lab-bc-client
 
-This is the client-side source for AY2026 llp-bc build infrastructure in 6.1903. Assuming you are in "our system", this piece of software allows you to run builds for and flash the ESP32C3-based RISCV development kit we use in the class..
+This is the client-side source code for AY2026 llp-bc build infrastructure in 6.1903. Assuming you are in "our system", this piece of software allows you to run builds for and flash the ESP32C3-based RISCV development kit we use in the class..
 
 # Installation
 
@@ -51,7 +51,7 @@ Prior to your first run on `llp-bc`, make sure to run:
 llp-bc configure
 ```
 
-And provide your kerberos (lowercase), MIT ID, the llp-bc server endpoint (for Fall 2026 6.1903 this is likely `eecs-digital-60.mit.edu/llp-bc`). These will be used to verify your submissions to the build server. You only need to run `configure` once after the installation. The system should verify your credentials when you submit them. If you get a error/issue, read what it says...maybe you aren't in the class so your credentials aren't on the machine? Maybe you typed in the wrong server endpoint?
+And provide your kerberos (lowercase), MIT ID, the llp-bc server endpoint (for Fall 2026 6.1903 this is likely `llp-relay.mit.edu/llp-bc`). These will be used to verify your submissions to the build server. You only need to run `configure` once after the installation. The system should verify your credentials when you submit them. If you get a error/issue, read what it says...maybe you aren't in the class so your credentials aren't on the machine? Maybe you typed in the wrong server endpoint?
 
 ## Running Builds
 
@@ -67,17 +67,27 @@ For example, if you are in a project directory, you would run:
 llp-bc compile ./
 ```
 
-The output of a build, if successful, will show up in a `build` folder (including the appropriate bit file and metadata).
+The output of a build, if successful, will show up in a `build` folder (including the appropriate bit file and metadata). If there is a compilation error, it will say so.
 
 ## Flashing your Microcontroller
 
-If you have a good compilation and are currently in your project, assuming there is `build` folder present, then you can simply run:
+If you had a good compilation result, you get back a binary that can be flashed to the ESP32C3 microcontroller. It should be placed in the `build` folder of your project. Assuming there is `build` folder present, then you can simply run:
 
 ```
 llp-bc flash ./
 ```
 
-There are some optional arguments that I'll write something about, but for our class, just the standard `llp-bc flash ./` should be good enough.
+## Monitoring your Microcontroller
+
+When your program is running, you can run the following command to bring up a serial monitor with your microcontroller:
+
+```
+llp-bc monitor
+```
+
+Anything you print via a `printf` call will be visible here. One important caveat is the serial buffer does not flush until a newline character `\n` is sent so when you want to print `printf("Hey");` will potentially not show up (or if it does, it will be delayed until a `\n` is sent, whereas `printf("Hey\n");` will show up immediately.
+
+To exit serial terminal, type Control-C.
 
 # Archiving
 
@@ -85,6 +95,6 @@ There are some optional arguments that I'll write something about, but for our c
 
 # Provenance
 
-This project is based on an original version developed by Jay Lang as part of his [2023 M.Eng thesis at MIT](https://dspace.mit.edu/handle/1721.1/151412?show=full) for original deployment in [6.205/6.111](https://fpga.mit.edu/6205/F25). It was then largely rewritten from the ground-up in Python for portability and maintainability. Nothing wrong with the original, just we learned a lot and things needed changin'.  This current repo (`llp-bc`) is a variant of that ongoing project, different enough from the one for 6.205 that I just made a new project.
+This project is based on an original version developed by Jay Lang as part of his [2023 M.Eng thesis at MIT](https://dspace.mit.edu/handle/1721.1/151412?show=full) for original deployment in [6.205/6.111](https://fpga.mit.edu/6205/F25). It was then largely rewritten by Joe Steinmeyer from the ground-up in Python for portability and maintainability. Nothing wrong with the original, just we learned a lot and things needed changin'.  This current repo (`llp-bc`) is a variant of that ongoing project, different enough from the one for 6.205 that I just made a new project.
 
 For security reasons, other portions of the current `llp-bc` project (server and worker source code) are private, but if interested, reach out to me at jodalyst@mit.edu.
